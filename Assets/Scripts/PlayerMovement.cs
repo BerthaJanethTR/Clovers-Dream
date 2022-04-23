@@ -12,6 +12,7 @@ public class PlayerMovement : MonoBehaviour
     //Capa que se usará para reconocer el piso
     [Header("Layer Masks")]
     [SerializeField] private LayerMask _groundLayer;
+    [SerializeField] private LayerMask _wallLayer;
 
     //Variables de movimiento de Clover
     [Header("Movement Variables")]
@@ -22,6 +23,7 @@ public class PlayerMovement : MonoBehaviour
     private float _verticalDirection;
     private bool _changingDirection => (_rb.velocity.x > 0f && _horizontalDirection < 0f) || (_rb.velocity.x < 0f && _horizontalDirection > 0f);
     private bool _facingRight = true;
+    private bool _canMove => !_wallGrab;
     bool isAlive = true;
 
     //Variables de salto de Clover
@@ -38,11 +40,23 @@ public class PlayerMovement : MonoBehaviour
     private float _jumpBufferCounter;
     private bool _canJump => _jumpBufferCounter > 0f && (_hangTimeCounter > 0f || _extraJumpsValue > 0);
 
+    //Variables para el comportamiento de Clover en una pared
+    [Header("Wall Movement Variables")]
+    [SerializeField] private float _wallSlideModifier = 0.5f;
+    private bool _wallGrab => _onWall && !_onGround && Input.GetButton("WallGrab");
+    private bool _wallSlide => _onWall && !_onGround && !Input.GetButton("WallGrab") && _rb.velocity.y < 0f;
+
     //Variables para detectar la colisión con el piso
     [Header("Ground Collision Variables")]
     [SerializeField] private float _groundRaycastLength;
     [SerializeField] private Vector3 _groundRaycastOffset;
     private bool _onGround;
+
+    //Variables para detectar la colisión con las paredes
+    [Header("Wall Collision Variables")]
+    [SerializeField] private float _wallRaycastLength;
+    private bool _onWall;
+    private bool _onRightWall;
 
     //Inicializacion de los componentes de Clover
     private void Start()
@@ -51,7 +65,7 @@ public class PlayerMovement : MonoBehaviour
         _anim = GetComponent<Animator>();
     }
 
-    //Bucle que estará detectando cuando Clover se moverá y cuando activará el método de muerte
+    //Bucle que estará detectando cuando Clover se moverá, cuando se volteará y cuando activará el método de muerte
     private void Update()
     {
         if (!isAlive) { return; }
@@ -67,7 +81,7 @@ public class PlayerMovement : MonoBehaviour
         }
         Death();
 
-        //Animaciones
+        //Animacion
         _anim.SetBool("isGrounded", _onGround);
         _anim.SetFloat("horizontalDirection", Mathf.Abs(_horizontalDirection));
         if (_horizontalDirection < 0f && _facingRight)
@@ -89,7 +103,8 @@ public class PlayerMovement : MonoBehaviour
     private void FixedUpdate()
     {
         CheckCollisions();
-        MoveCharacter();
+        if (_canMove) MoveCharacter();
+        else _rb.velocity = Vector2.Lerp(_rb.velocity, (new Vector2(_horizontalDirection * _maxMoveSpeed, _rb.velocity.y)), .5f * Time.deltaTime);
         if (_onGround)
         {
             ApplyGroundLinearDrag();
@@ -107,6 +122,8 @@ public class PlayerMovement : MonoBehaviour
             _hangTimeCounter -= Time.fixedDeltaTime;
         }
         if (_canJump) Jump();
+        if (_wallGrab) WallGrab();
+        if (_wallSlide) WallSlide();
     }
 
     //Método para control básico
@@ -179,6 +196,44 @@ public class PlayerMovement : MonoBehaviour
             }     
     }
 
+    //Método para agarrarse de la pared
+    void WallGrab()
+    {
+        _rb.gravityScale = 0f;
+        _rb.velocity = Vector2.zero;
+        StickToWall();
+    }
+
+    //Método para deslizarse por las paredes
+    void WallSlide()
+    {
+        _rb.velocity = new Vector2(_rb.velocity.x, -_maxMoveSpeed * _wallSlideModifier);
+        StickToWall();
+    }
+
+    //Método para dejar de deslizarse por la pared
+    void StickToWall()
+    {
+        //Empuja a Clover hacia la pared
+        if (_onRightWall && _horizontalDirection >= 0f)
+        {
+            _rb.velocity = new Vector2(1f, _rb.velocity.y);
+        }
+        else if (!_onRightWall && _horizontalDirection <= 0f)
+        {
+            _rb.velocity = new Vector2(-1f, _rb.velocity.y);
+        }
+
+        if (_onRightWall && !_facingRight)
+        {
+            Flip();
+        }
+        else if (!_onRightWall && _facingRight)
+        {
+            Flip();
+        }
+    }
+
     //Método para voltear el sprite de Clover
     void Flip()
     {
@@ -196,19 +251,26 @@ public class PlayerMovement : MonoBehaviour
         }
     }
 
-    //Método para detectar las colisiones con el piso
+    //Método para detectar las colisiones con el piso y las paredes
     private void CheckCollisions()
     {
         _onGround = Physics2D.Raycast(transform.position + _groundRaycastOffset, Vector2.down, _groundRaycastLength, _groundLayer) ||
                     Physics2D.Raycast(transform.position - _groundRaycastOffset, Vector2.down, _groundRaycastLength, _groundLayer);
+        
+        _onWall = Physics2D.Raycast(transform.position, Vector2.right, _wallRaycastLength, _wallLayer) ||
+                    Physics2D.Raycast(transform.position, Vector2.left, _wallRaycastLength, _wallLayer);
+        _onRightWall = Physics2D.Raycast(transform.position, Vector2.right, _wallRaycastLength, _wallLayer);
     }
 
-    //Lineas que detectarán el piso
+    //Lineas que detectarán el piso y las paredes
     private void OnDrawGizmos()
     {
         Gizmos.color = Color.green;
 
         Gizmos.DrawLine(transform.position + _groundRaycastOffset, transform.position + _groundRaycastOffset + Vector3.down * _groundRaycastLength);
         Gizmos.DrawLine(transform.position - _groundRaycastOffset, transform.position - _groundRaycastOffset + Vector3.down * _groundRaycastLength);
+
+        Gizmos.DrawLine(transform.position, transform.position + Vector3.right * _wallRaycastLength);
+        Gizmos.DrawLine(transform.position, transform.position + Vector3.left * _wallRaycastLength);
     }
 }
