@@ -9,7 +9,11 @@ public class PlayerMovement : MonoBehaviour
     private Rigidbody2D _rb;
     private Animator _anim;
 
-    //Capa que se usará para reconocer el piso
+    //Campo donde poner el sonido de salto
+    [Header("SFX")]
+    [SerializeField] AudioClip jumpSFX;
+
+    //Capa que se usará para reconocer el piso y pared
     [Header("Layer Masks")]
     [SerializeField] private LayerMask _groundLayer;
     [SerializeField] private LayerMask _wallLayer;
@@ -28,10 +32,11 @@ public class PlayerMovement : MonoBehaviour
 
     //Variables de salto de Clover
     [Header("Jump Variables")]
-    [SerializeField] private float _jumpForce = 12f;
+    [SerializeField] private float _jumpForce = 14f;
     [SerializeField] private float _airLinearDrag = 2.5f;
     [SerializeField] private float _fallMultiplier = 8f;
     [SerializeField] private float _lowJumpFallMultiplier = 5f;
+    [SerializeField] private float _downMultiplier = 12f;
     [SerializeField] private int _extraJumps = 1;
     [SerializeField] private float _hangTime = .1f;
     [SerializeField] private float _jumpBufferLength = .1f;
@@ -67,7 +72,7 @@ public class PlayerMovement : MonoBehaviour
         _anim = GetComponent<Animator>();
     }
 
-    //Bucle que estará detectando cuando Clover se moverá, cuando se volteará y cuando activará el método de muerte
+    //Bucle que estará detectando cuando Clover se moverá, saltará y activará animaciones y el estado de muerte
     private void Update()
     {
         if (!isAlive) { return; }
@@ -110,16 +115,19 @@ public class PlayerMovement : MonoBehaviour
             {
                 if (_onRightWall && _horizontalDirection > 0f || !_onRightWall && _horizontalDirection < 0f)
                 {
+                    AudioSource.PlayClipAtPoint(jumpSFX, Camera.main.transform.position);
                     StartCoroutine(NeutralWallJump());
                 }
                 else
                 {
+                    AudioSource.PlayClipAtPoint(jumpSFX, Camera.main.transform.position);
                     WallJump();
                 }
                 Flip();
             }
             else
             {
+                AudioSource.PlayClipAtPoint(jumpSFX, Camera.main.transform.position);
                 Jump(Vector2.up);
             }
         }
@@ -170,7 +178,7 @@ public class PlayerMovement : MonoBehaviour
     private void Jump(Vector2 direction)
     {
         if (!isAlive) { return; }
-        if (!_onGround && !_onWall)
+        if (!_onGround)
             _extraJumpsValue--;
 
         ApplyAirLinearDrag();
@@ -180,7 +188,7 @@ public class PlayerMovement : MonoBehaviour
         _jumpBufferCounter = 0f;
         _isJumping = true;
     }
-    
+
     //Método para saltar desde la pared
     private void WallJump()
     {
@@ -200,6 +208,12 @@ public class PlayerMovement : MonoBehaviour
     //Método para calcular fuerza de gravedad entre saltos
     private void FallMultiplier()
     {
+        if (_verticalDirection < 0f)
+        {
+            _rb.gravityScale = _downMultiplier;
+        }
+        else
+        {
             if (_rb.velocity.y < 0)
             {
                 _rb.gravityScale = _fallMultiplier;
@@ -211,7 +225,8 @@ public class PlayerMovement : MonoBehaviour
             else
             {
                 _rb.gravityScale = 1f;
-            }     
+            }
+        }
     }
 
     //Método para agarrarse de la pared
@@ -257,7 +272,7 @@ public class PlayerMovement : MonoBehaviour
         transform.Rotate(0f, 180f, 0f);
     }
 
-    //Método que controla las animaciones
+    //Método que controla los estados de las animaciones
     void Animation()
     {
         if ((_horizontalDirection < 0f && _facingRight || _horizontalDirection > 0f && !_facingRight) && !_wallGrab && !_wallSlide)
@@ -308,6 +323,8 @@ public class PlayerMovement : MonoBehaviour
         {
             isAlive = false;
             _anim.SetBool("isAlive", false);
+            _anim.SetBool("isFalling", false);
+            FindObjectOfType<GameSession>().ProcessPlayerDeath();
         }
     }
 
