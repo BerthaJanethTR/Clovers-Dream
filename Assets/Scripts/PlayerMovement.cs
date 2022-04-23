@@ -38,11 +38,13 @@ public class PlayerMovement : MonoBehaviour
     private int _extraJumpsValue;
     private float _hangTimeCounter;
     private float _jumpBufferCounter;
-    private bool _canJump => _jumpBufferCounter > 0f && (_hangTimeCounter > 0f || _extraJumpsValue > 0);
+    private bool _canJump => _jumpBufferCounter > 0f && (_hangTimeCounter > 0f || _extraJumpsValue > 0 || _onWall);
+    private bool _isJumping = false;
 
     //Variables para el comportamiento de Clover en una pared
     [Header("Wall Movement Variables")]
     [SerializeField] private float _wallSlideModifier = 0.5f;
+    [SerializeField] private float _wallJumpXVelocityHaltDelay = 0.2f;
     private bool _wallGrab => _onWall && !_onGround && Input.GetButton("WallGrab");
     private bool _wallSlide => _onWall && !_onGround && !Input.GetButton("WallGrab") && _rb.velocity.y < 0f;
 
@@ -79,24 +81,8 @@ public class PlayerMovement : MonoBehaviour
         {
             _jumpBufferCounter -= Time.deltaTime;
         }
+        Animation();
         Death();
-
-        //Animacion
-        _anim.SetBool("isGrounded", _onGround);
-        _anim.SetFloat("horizontalDirection", Mathf.Abs(_horizontalDirection));
-        if (_horizontalDirection < 0f && _facingRight)
-        {
-            Flip();
-        }
-        else if (_horizontalDirection > 0f && !_facingRight)
-        {
-            Flip();
-        }
-        if (_rb.velocity.y < 0f)
-        {
-            _anim.SetBool("isJumping", false);
-            _anim.SetBool("isFalling", true);
-        }
     }
 
     //Bucle que hará los calculos para el correcto movimiento de Clover
@@ -110,20 +96,39 @@ public class PlayerMovement : MonoBehaviour
             ApplyGroundLinearDrag();
             _extraJumpsValue = _extraJumps;
             _hangTimeCounter = _hangTime;
-
-            //Animacion
-            _anim.SetBool("isJumping", false);
-            _anim.SetBool("isFalling", false);
         }
         else
         {
             ApplyAirLinearDrag();
             FallMultiplier();
             _hangTimeCounter -= Time.fixedDeltaTime;
+            if (!_onWall || _rb.velocity.y < 0f) _isJumping = false;
         }
-        if (_canJump) Jump();
-        if (_wallGrab) WallGrab();
-        if (_wallSlide) WallSlide();
+        if (_canJump)
+        {
+            if (_onWall && !_onGround)
+            {
+                if (_onRightWall && _horizontalDirection > 0f || !_onRightWall && _horizontalDirection < 0f)
+                {
+                    StartCoroutine(NeutralWallJump());
+                }
+                else
+                {
+                    WallJump();
+                }
+                Flip();
+            }
+            else
+            {
+                Jump(Vector2.up);
+            }
+        }
+        if (!_isJumping)
+        {
+            if (_wallSlide) WallSlide();
+            if (_wallGrab) WallGrab();
+            if (_onWall) StickToWall();
+        }
     }
 
     //Método para control básico
@@ -162,21 +167,34 @@ public class PlayerMovement : MonoBehaviour
     }
 
     //Método para el salto
-    private void Jump()
+    private void Jump(Vector2 direction)
     {
         if (!isAlive) { return; }
-        if (!_onGround)
+        if (!_onGround && !_onWall)
             _extraJumpsValue--;
 
         ApplyAirLinearDrag();
         _rb.velocity = new Vector2(_rb.velocity.x, 0f);
-        _rb.AddForce(Vector2.up * _jumpForce, ForceMode2D.Impulse);
+        _rb.AddForce(direction * _jumpForce, ForceMode2D.Impulse);
         _hangTimeCounter = 0f;
         _jumpBufferCounter = 0f;
+        _isJumping = true;
+    }
+    
+    //Método para saltar desde la pared
+    private void WallJump()
+    {
+        Vector2 jumpDirection = _onRightWall ? Vector2.left : Vector2.right;
+        Jump(Vector2.up + jumpDirection);
+    }
 
-        //Animacion
-        _anim.SetBool("isJumping", true);
-        _anim.SetBool("isFalling", false);
+    //Método para saltar desde una pared con menos fuerza
+    IEnumerator NeutralWallJump()
+    {
+        Vector2 jumpDirection = _onRightWall ? Vector2.left : Vector2.right;
+        Jump(Vector2.up + jumpDirection);
+        yield return new WaitForSeconds(_wallJumpXVelocityHaltDelay);
+        _rb.velocity = new Vector2(0f, _rb.velocity.y);
     }
 
     //Método para calcular fuerza de gravedad entre saltos
@@ -201,14 +219,12 @@ public class PlayerMovement : MonoBehaviour
     {
         _rb.gravityScale = 0f;
         _rb.velocity = Vector2.zero;
-        StickToWall();
     }
 
     //Método para deslizarse por las paredes
     void WallSlide()
     {
         _rb.velocity = new Vector2(_rb.velocity.x, -_maxMoveSpeed * _wallSlideModifier);
-        StickToWall();
     }
 
     //Método para dejar de deslizarse por la pared
@@ -239,6 +255,50 @@ public class PlayerMovement : MonoBehaviour
     {
         _facingRight = !_facingRight;
         transform.Rotate(0f, 180f, 0f);
+    }
+
+    //Método que controla las animaciones
+    void Animation()
+    {
+        if ((_horizontalDirection < 0f && _facingRight || _horizontalDirection > 0f && !_facingRight) && !_wallGrab && !_wallSlide)
+        {
+            Flip();
+        }
+        if (_onGround)
+        {
+            _anim.SetBool("isGrounded", true);
+            _anim.SetBool("isFalling", false);
+            _anim.SetBool("WallGrab", false);
+            _anim.SetFloat("horizontalDirection", Mathf.Abs(_horizontalDirection));
+        }
+        else
+        {
+            _anim.SetBool("isGrounded", false);
+        }
+        if (_isJumping)
+        {
+            _anim.SetBool("isJumping", true);
+            _anim.SetBool("isFalling", false);
+            _anim.SetBool("WallGrab", false);
+            _anim.SetFloat("verticalDirection", 0f);
+        }
+        else
+        {
+            _anim.SetBool("isJumping", false);
+
+            if (_wallGrab || _wallSlide)
+            {
+                _anim.SetBool("WallGrab", true);
+                _anim.SetBool("isFalling", false);
+                _anim.SetFloat("verticalDirection", 0f);
+            }
+            else if (_rb.velocity.y < 0f)
+            {
+                _anim.SetBool("isFalling", true);
+                _anim.SetBool("WallGrab", false);
+                _anim.SetFloat("verticalDirection", 0f);
+            }
+        }
     }
 
     //Método para activar la acción de muerte
