@@ -3,7 +3,8 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags: []
+  tags:
+  - GameMusic
   layers:
   - Default
   - TransparentFX
@@ -15,9 +16,9 @@ TagManager:
   - Enemy
   - Hazard
   - Wall
-  - 
-  - 
-  - 
+  - Player
+  - Background
+  - Trigger
   - 
   - 
   - 
@@ -40,4 +41,22 @@ TagManager:
   m_SortingLayers:
   - name: Default
     uniqueID: 0
+    locked: 0
+  - name: Background
+    uniqueID: 1292754295
+    locked: 0
+  - name: Decorative
+    uniqueID: 1543331215
+    locked: 0
+  - name: Player
+    uniqueID: 2526276167
+    locked: 0
+  - name: Walls
+    uniqueID: 2014598959
+    locked: 0
+  - name: Platforms
+    uniqueID: 4065180583
+    locked: 0
+  - name: Trigger
+    uniqueID: 2739371199
     locked: 0
